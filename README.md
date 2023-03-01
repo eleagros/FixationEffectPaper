@@ -61,4 +61,4 @@ Three subfolders can be found in the `data` folder:
 
 ## License
 
-All source code is made available under a MIT license. See `LICENSE.md` for the full license text.
+All source code is made available under a MIT license. See `LICENSE` for the full license text.
