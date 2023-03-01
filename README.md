@@ -33,7 +33,7 @@ All source code used to generate the results and figures in the paper are in the
 You can download a copy of all the files in this repository by cloning the
 [git](https://git-scm.com/) repository:
 
-    git clone [https://github.com/RomGr/FixationEffectPaper.git]
+    git clone https://github.com/RomGr/FixationEffectPaper.git
 
 
 ## Selection of ROIs
