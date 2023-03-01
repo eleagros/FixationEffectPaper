@@ -36,71 +36,29 @@ You can download a copy of all the files in this repository by cloning the
     git clone [https://github.com/RomGr/FixationEffectPaper.git]
 
 
-## `selection_of_ROIs.ipynb`
+## Selection of ROIs
 
-You'll need a working Python environment to run the code. The recommended way to set up your environment is through the [Anaconda Python distribution](https://www.anaconda.com/download/) which provides the `conda` package manager.
-Anaconda can be installed in your user directory and does not interfere with the system Python installation.
-
-We use `conda` virtual environments to manage the project dependencies in
-isolation.
-Thus, you can install our dependencies without causing conflicts with your
-setup (even with different Python versions).
-
-Run the following command in the repository folder (where `environment.yml`
-is located) to create a separate environment and install all required
-dependencies in it:
-
-    conda env create
+The first juypter notebook can be run to select automatically 25 ROIs within the white matter, and 25 ROIs for each series of measurement located in the folder `data/fixation_over_time`. CAUTION: running the notebook erase the previously generated results.
 
 
-## Reproducing the results
+## Parameter comparison
 
-Before running any code you must activate the conda environment:
+The second juypter notebook, which should be run after the selection of the ROIs, was used to perform the statistical analyses for the evolution of the means and the fold changes. The results generated (mainly excel tables), can be found in the folder `results/comparaison`. The plots for the manuscript were created using Graphpad Prism.
 
-    source activate ENVIRONMENT_NAME
 
-or, if you're on Windows:
+## Evalutation border zone
 
-    activate ENVIRONMENT_NAME
+The last juypter notebook, independent for the first two ones, allows to reproduce the results for the evalutation of the uncertainty region in between white and grey matter, and its evolution following formalin fixation. The results generated can be found in the folders `results/fixed` and `results/fresh`. The plots for the manuscript were created using python and are available directly in the `results` folders.
 
-This will enable the environment for your current terminal session.
-Any subsequent commands will use software that is installed in the environment.
 
-To build and test the software, produce all results and figures, and compile
-the manuscript PDF, run this in the top level of the repository:
+## Data
 
-    make all
-
-If all goes well, the manuscript PDF will be placed in `manuscript/output`.
-
-You can also run individual steps in the process using the `Makefile`s from the
-`code` and `manuscript` folders. See the respective `README.md` files for
-instructions.
-
-Another way of exploring the code results is to execute the Jupyter notebooks
-individually.
-To do this, you must first start the notebook server by going into the
-repository top level and running:
-
-    jupyter notebook
-
-This will start the server and open your default web browser to the Jupyter
-interface. In the page, go into the `code/notebooks` folder and select the
-notebook that you wish to view/run.
-
-The notebook is divided into cells (some have text while other have code).
-Each cell can be executed using `Shift + Enter`.
-Executing text cells does nothing and executing code cells runs the code
-and produces it's output.
-To execute the whole notebook, run all cells in order.
+Three subfolders can be found in the `data` folder:
+1. `fixation_over_time`: contains the measurements for the section performed at different time points
+2. `fresh`: contains the measurements for the fresh section
+3. `fixed`: contains the measurements for the fixed section performed 24 hours after the fresh ones
 
 
 ## License
 
-All source code is made available under a BSD 3-clause license. You can freely
-use and modify the code, without warranty, so long as you provide attribution
-to the authors. See `LICENSE.md` for the full license text.
-
-The manuscript text is not open source. The authors reserve the rights to the
-article content, which is currently submitted for publication in the
-JOURNAL NAME.
+All source code is made available under a BSD 3-clause license. You can freely use and modify the code, without warranty, so long as you provide attribution to the authors. See `LICENSE.md` for the full license text.
