@@ -10,9 +10,14 @@ This study aimed to analyse the effects of formalin fixation on the polarimetric
 
 ## Abstract
 
-**Significance**: Imaging Mueller polarimetry (IMP) appears as a promising technique for real-time delineation of healthy and neoplastic tissue during neurosurgery. The training of machine learning algorithms used for the image post-processing requires large data sets that can be derived from the measurements of formalin-fixed brain sections. However, the success of the transfer of such algorithms from fixed to fresh brain tissue and vice-versa depends on the degree of alterations of polarimetric properties induced by formalin fixation (FF). Aim: The comprehensive studies were performed on the FF induced changes in fresh brain tissue polarimetric properties.
+**Significance**: Imaging Mueller polarimetry (IMP) appears as a promising technique for real-time delineation of healthy and neoplastic tissue during neurosurgery. The training of machine learning algorithms used for the image post-processing requires large data sets that can be derived from the measurements of formalin-fixed brain sections. However, the success of the transfer of such algorithms from fixed to fresh brain tissue and vice-versa depends on the degree of alterations of polarimetric properties induced by formalin fixation (FF).
+
+**Aim**: The comprehensive studies were performed on the FF induced changes in fresh brain tissue polarimetric properties.
+
 **Approach**: Polarimetric properties of pig brain were assessed in thirty coronal thick sections before and after FF using a wide-field IMP system. The width of the uncertainty region between grey and white matter was also estimated. 
+
 **Results**: The depolarization increased by 2% in grey matter and decreased by 1% in white matter following FF, whereas linear retardance decreased by 30% in both tissue types after FF. The visual contrast between grey and white matter and fiber tracking remained preserved after FF. Tissue shrinkage induced by FF did not have significant effect on the uncertainty region width.
+
 **Conclusions**: Similar polarimetric properties were observed in both fresh and fixed brain tissues, indicating a high potential for transfer learning.
 
 
