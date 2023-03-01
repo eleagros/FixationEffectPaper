@@ -130,3 +130,5 @@ dmypy.json
 
 data/fixed
 data/fresh
+data/fixation_over_time
+alignment/
