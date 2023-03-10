@@ -28,7 +28,25 @@ import matlab.engine
 ###########################################################################################################################
 
 def get_mask_matter_and_grid(path_folder, tissue_type):
-    _ = get_masks(path_folder)
+    """
+    get_mask_matter_and_grid allows to obtain the masks for white and grey matter for the folder analyzed and the grid to 
+    register the ROIs as they are obtained
+
+    Parameters
+    ----------
+    path_folder : str
+        the path to the folder
+    tissue_type : str
+        the tissue type considered (i.e. 'WM' or 'GM')
+        
+    Returns
+    -------
+    mask_matter : array of shape(388,516)
+        the annotation mask for white or grey matter
+    grid : array of shape(388,516)
+        the grid that will be used to register the ROIs as they are obtained
+    """
+    _ = get_masks(path_folder, bg = False)
     path_annotation = os.path.join(path_folder, 'annotation')
     WM_mask = plt.imread(os.path.join(path_annotation, 'WM_merged.png'))
     GM_mask = plt.imread(os.path.join(path_annotation, 'GM_merged.png'))
@@ -42,15 +60,48 @@ def get_mask_matter_and_grid(path_folder, tissue_type):
     return mask_matter, grid
 
 def load_data_mm(path_folder, wavelength):
-    with open(path_folder + '/polarimetry/' + str(wavelength) + 'nm/MM.pickle', 'rb') as handle:
-        mat = pickle.load(handle)
-    linear_retardance = load_and_verify_parameters(mat, 'totR')
+    """
+    load_data_mm allows to load the Mueller Matrix and the parameters of interest (retardance, diattenuation, azimuth and depolarization)
+
+    Parameters
+    ----------
+    path_folder : str
+        the path to the folder
+    wavelength : int or str
+        the wavelength being considered (i.e. '550' or '650')
+        
+    Returns
+    -------
+    linear_retardance : array of shape(388,516)
+    diattenuation : array of shape(388,516)
+    azimuth : array of shape(388,516)
+    depolarization : array of shape(388,516)
+    mat : dict
+        the Mueller matrix
+    """
+    mat = np.load(os.path.join(path_folder + '/polarimetry/' + str(wavelength) + 'nm/MM.npz'))
+    linear_retardance = load_and_verify_parameters(mat, 'linR')
     diattenuation = load_and_verify_parameters(mat, 'totD')
     azimuth = load_and_verify_parameters(mat, 'azimuth')
     depolarization = load_and_verify_parameters(mat, 'totP')
     return linear_retardance, diattenuation, azimuth, depolarization, mat
 
 def load_and_verify_parameters(mat, name):
+    """
+    select the array for the parameter and check the correct size
+
+    Parameters
+    ----------
+    mat : dict
+        the Mueller matrix
+    name : str
+        the key for the parameter of interest
+        
+    Returns
+    -------
+    out : array of shape(388,516)
+        the values for the parameter of interest
+    """
     out = mat[name]
     assert len(out) == 388
     assert len(out[0]) == 516
@@ -64,23 +115,91 @@ def load_and_verify_parameters(mat, name):
 ###########################################################################################################################
 
 
+def get_square_coordinates(mask, square_size, grid, mat = None, coordinates = None):
+    """
+    get_square_coordinates allows to obtain a randomly selected ROI in the image, and to check for the fulfillement of:
+        1. the presence of pixels labelled as the tissue type that is being analyzed 
+        2. the presence of valid pixels in the ROI
+
+    Parameters
+    ----------
+    mask : array of shape (388, 516)
+        the mask for tissue type in the complete image
+    square_size : int
+        the size of the ROI square
+    grid : array of shape (388, 516)
+        the grid used to register the ROIs as they are obtained
+    mat : dict
+        the Mueller matrix
+    coordinates : list of int    
+        the minimum and maximum values for the ROI index
+    
+    Returns
+    -------
+    coordinates : list of int    
+        the minimum and maximum values for the ROI index
+    grid : array of shape (388, 516)
+        the grid used to register the ROIs, updated for the new ROI
+    """
+    sum(sum(mat['Msk'][20:40, 40:60]))
+    
+    found = False
+    counter = 0
+    coord_ = None
+    
+    while not found and counter < 1000:
+        randomRow, randomCol = get_random_pixel(mask)
+        if mask[randomRow, randomCol] == 0:
+            counter += 1
+        else:
+            # print(select_region(mask.shape, mask, randomRow, randomCol))
+            region, grided, coordinates = select_region(mask.shape, mask, randomRow, randomCol, square_size, grid)
+            
+            positive_mask = search_for_validity(region, 0, mat = mat, coordinates = coordinates)
+            positive_grid = search_for_validity(grided, 1, mat = mat, coordinates = coordinates)
+
+            positive = positive_mask and positive_grid
+            
+            if positive:
+                found = True
+                coord_ = coordinates
+                grid = update_grid(grid, coordinates)
+
+            counter += 1
+            
+    if counter == 1000:
+        pass
+    
+    return coordinates, grid
+
+
 def select_region(shape, mask, idx, idy, square_size, grid, border = 1.5, offset = 15):
     """
-    select the region that will be used to curate a pixel of the azimuth
+    select randomly a region in the image that is located at a distance > offset from the border of the image
 
     Parameters
     ----------
     shape : tuple
         the shape of the array
-    azimuth : array of shape (388, 516)
-        azimuth array
+    mask : array of shape (388, 516)
+        the mask for tissue type in the complete image
     idx, idy : int, int
         the index values of the pixel of interest
-        
+    grid : array of shape (388, 516)
+        the grid used to register the ROIs as they are obtained
+    border : double
+        a scaling number for checking that the pixels in the region immediatly surrounding the ROI also belong to the same tissue type
+    offset : double
+        an offset ensuring that the ROIs are not located to close to the border of the image
+    
     Returns
     -------
-    azimuth[min_x: max_x, min_y:max_y] : array
-        the neighboring pixels
+    mask : array
+        the mask for tissue type in the ROI
+    grid : array
+        the grid 
+    min_y, max_y, min_x, max_x : int
+        the minimum and maximum values for the ROI index
     """
     max_x, min_x = None, None
     max_y, min_y = None, None
@@ -127,17 +246,57 @@ def select_region(shape, mask, idx, idy, square_size, grid, border = 1.5, offset
                                                         int(min_y):int(max_y)], [min_y, max_y, min_x, max_x]
 
 def get_random_pixel(mask):
+    """
+    get_random_pixel returns a randon column and row using a uniform distribution
+
+    Parameters
+    ----------
+    mask : array of shape (388, 516)
+        the mask for tissue type in the complete image
+
+    
+    Returns
+    -------
+    randomRow : int
+        the row index
+    randomCol : int
+        the column index
+    """
     randomRow = np.random.randint(mask.shape[0], size=1)
     randomCol = np.random.randint(mask.shape[1], size=1)
     return randomRow[0], randomCol[0]
 
 def search_for_validity(mask, idx, mat = None, coordinates = None):
+    """
+    search_for_validity allows to check if the ROI generated fullfills the following requirements:
+        1. contains also pixels labelled as the tissue type studied
+        2. contains more than 80% of valid pixels
+
+    Parameters
+    ----------
+    mask : array 
+        the mask for tissue type in the ROI
+    idx : int
+        the value against which to check the values in the mask (0 for the mask, 1 for the grid)
+    mat : dict
+        the Mueller matrix
+    coordinates : list of int    
+        the minimum and maximum values for the ROI index
+        
+    Returns
+    -------
+    postitive : boolean
+        indicates if the consitions were fulfilled
+    """
     positive = True
+    
+    # 1. contains also pixels labelled as the tissue type studied
     for row in mask:
         for y in row:
             if y == idx:
                 positive = False
     
+    # 2. contains more than 80% of valid pixels
     if positive and idx == 1:
         positive = sum(sum(mat['Msk'][coordinates[2]:coordinates[3], coordinates[0]:coordinates[1]])) > 0.8 * mask.shape[0]*mask.shape[1]
         if not positive:
@@ -145,45 +304,26 @@ def search_for_validity(mask, idx, mat = None, coordinates = None):
     return positive
 
 def update_grid(grided, coordinates):
+    """
+    update_grid updates the grid and add the newly generated ROI
+
+    Parameters
+    ----------
+    grided : array of shape (388, 516) 
+        the grid used to register the ROIs as they are obtained
+    coordinates : list of int    
+        the minimum and maximum values for the ROI index
+        
+    Returns
+    -------
+    grided : array of shape (388, 516) 
+        the updated grid
+    """
     for idx, x in enumerate(grided):
         for idy, y in enumerate(x):
             if coordinates[0] <= idy <= coordinates[1] and coordinates[2] <= idx <= coordinates[3]:
                 grided[idx, idy] = 1
     return grided
-
-def get_square_coordinates(mask, square_size, grid, mat = None, coordinates = None):
-    
-    sum(sum(mat['Msk'][20:40, 40:60]))
-    
-    found = False
-    counter = 0
-    coord_ = None
-    
-    while not found and counter < 1000:
-        randomRow, randomCol = get_random_pixel(mask)
-        if mask[randomRow, randomCol] == 0:
-            counter += 1
-        else:
-            # print(select_region(mask.shape, mask, randomRow, randomCol))
-            region, grided, coordinates = select_region(mask.shape, mask, randomRow, randomCol, square_size, grid)
-            
-            positive_mask = search_for_validity(region, 0, mat = mat, coordinates = coordinates)
-            positive_grid = search_for_validity(grided, 1, mat = mat, coordinates = coordinates)
-
-            positive = positive_mask and positive_grid
-            
-            if positive:
-                found = True
-                coord_ = coordinates
-                grid = update_grid(grid, coordinates)
-
-            counter += 1
-            
-    if counter == 1000:
-        pass
-    
-    return coordinates, grid
-
 
 
 
@@ -222,7 +362,7 @@ def square_selection(path_folder_temp, path_folder, path_folder_50x50, folder_na
         
         # get the path of the image and of the new output folder
         path_image = path_folder + '/polarimetry/' + str(wavelength) + 'nm/' + folder_name + '_' + str(wavelength) + 'nm_realsize.png'
-        path_output, new_folder_name = get_new_output(path_folder_temp, path_folder_50x50, WM)
+        path_output, new_folder_name = get_new_output(path_folder_50x50, WM)
         with open(os.path.join(path_folder_temp, 'image_path.txt'), 'w') as file:
             file.write(path_image)
             
@@ -290,8 +430,22 @@ def square_selection(path_folder_temp, path_folder, path_folder_50x50, folder_na
     return propagation_list
 
 
-def get_new_output(path_folder_temp, path_folder_50x50, WM):
-    
+def get_new_output(path_folder_50x50, WM):
+    """
+    get_new_output returns the new name for the folder in which the results should be outputted
+
+    Parameters
+    ----------
+    path_folder_50x50 : str
+        the path to the 50x50 folder in the folder for the measurement of interest
+    WM : boolean  
+        indicates if white or grey matter is analyzed
+        
+    Returns
+    -------
+    path_output : str
+        the new name for the folder in which the results should be outputted
+    """
     if WM:
         folder_number = len([name for name in os.listdir(path_folder_50x50) if os.path.isdir(path_folder_50x50 + name) and name.replace('WM_', '').isdecimal()])
         path_output = path_folder_50x50 + 'WM_' + str(folder_number + 1)
@@ -308,6 +462,16 @@ def get_new_output(path_folder_temp, path_folder_50x50, WM):
 
 
 def generate_summary_file_series(path_output, square_number):
+    """
+    generate_summary_file_series is used to create the summary table reporting the statistical metrics of the polarimetric parameters for a single ROI
+
+    Parameters
+    ----------
+    path_output : str
+        the path to the folder in which the results should be outputted
+    square_number : int  
+        the number of square analyzed (in this case 1)
+    """
     summaries_generated_fn = []
     for idx in range(square_number):
         try:
@@ -330,9 +494,43 @@ def generate_summary_file_series(path_output, square_number):
         result.to_excel(path_output + 'summaries.xlsx')
     
 def histogram_analysis(all_coordinates, linear_retardance, square_number, square_size_horizontal, 
-                       square_size_vertical, square_size, orientation, diattenuation, azimuth, depolarization, 
-                       coordinates_long, path_image, path_output, path_image_ori = None, WM = True,
-                       mat = None):
+                       square_size_vertical, square_size, orientation, diattenuation, 
+                       azimuth, depolarization, coordinates_long, path_image, path_output, 
+                       path_image_ori = None, WM = True, mat = None):
+    """
+    histogram_analysis is the master function used to analyze the polarimetric parameters in the ROI, save the statistical descriptors and generate an image with the pixel in the new ROI highlighted
+
+    Parameters
+    ----------
+    all_coordinates : list of list
+        the coordinated of the squares that is being studied (here the length of the list is 0)
+    linear_retardance : array of shape (388, 516)
+    diattenuation : array of shape (388, 516)
+    azimuth : array of shape (388, 516)
+    depolarization : array of shape (388, 516)
+    square_number : int
+        the number of squares (here set to 1)
+    square_size_horizontal, square_size_vertical : int, int
+        the size of the square / rectangle in the horizontal and vertical axis (in this case, they are the same)
+    square_size : int
+        the size of the square
+    orientation : str
+        horizontal or vertical
+    coordinates_long : not used anymore
+    path_image, path_image_ori : str, str
+        the path to the greyscale images on which to highlight the ROI
+    path_output : str
+        the path to the folder in which to save the image
+    WM : boolean
+        boolean indicating if white or grey matter is currently being analyzed
+    mat : dict
+        the mueller matrix
+    
+    Returns
+    -------
+    imnp_mask : array of shape (388, 516)
+        the image with the new ROI highlighted
+    """
     data = []
     for idx, coordinates in enumerate(all_coordinates):
         data.append(analyze_and_get_histograms(linear_retardance, diattenuation, azimuth, depolarization, mat, 
@@ -360,6 +558,27 @@ def histogram_analysis(all_coordinates, linear_retardance, square_number, square
     
 def analyze_and_get_histograms(linear_retardance, diattenuation, azimuth, depolarization, mat, coordinates, 
                                imnp = None, angle = 0):
+    """
+    analyze_and_get_histograms extracts the values of the parameters in the ROI, as well as the statistical descriptors
+
+    Parameters
+    ----------
+    linear_retardance : array of shape (388, 516)
+    diattenuation : array of shape (388, 516)
+    azimuth : array of shape (388, 516)
+    depolarization : array of shape (388, 516)
+    mat : dict
+        the mueller matrix
+    imnp : array of shape (388, 516)  
+        a mask representing the pixels for which values that should be extracted (optional)
+    angle : int
+        the angle by which the azimuth should be corrected
+        
+    Returns
+    -------
+    retardance, diattenua, azi, depol : lists
+        the values of the parameters in the ROI, as well as the statistical descriptors 
+    """
     path_folder_temp = './temp'
     
     with open(path_folder_temp + '/histogram_parameters.pickle', 'rb') as handle:
@@ -385,7 +604,28 @@ def analyze_and_get_histograms(linear_retardance, diattenuation, azimuth, depola
     return coordinates, retardance, diattenua, azi, depol
 
 def get_area_of_interest(params, matrix, param, masked, angle = 0, mat = None):
-    
+    """
+    get_area_of_interest extracts the values of one parameter in the ROI, as well as the statistical descriptors
+
+    Parameters
+    ----------
+    params : 
+    matrix : array of shape (388, 516)
+        the polarimetric parameter values
+    param : list
+        the parameters to use to build the histogram to extract the 'max' descriptor
+    masked : array of shape (388, 516)
+        optional, mask that represent the pixels for which the values should be extracted
+    angle : int
+        the angle by which the azimuth should be corrected
+    mat : dict
+        the mueller matrix
+        
+    Returns
+    -------
+    mean, stdev, maximum, listed, median : list
+        the values of one parameter in the ROI, as well as the statistical descriptors
+    """
     if masked:
         listed = []
         for idx_x, x in enumerate(params):
@@ -412,11 +652,25 @@ def get_area_of_interest(params, matrix, param, masked, angle = 0, mat = None):
     maximum = data[1][max_idx]
     return mean, stdev, maximum, listed, median
 
-
-def get_params_summary(params, name):
-    return [name, params[0], params[1], params[2], params[4]]
-
 def save_parameters(retardance, diattenua, azi, depol, path_output, square_size, idx = None):
+    """
+    save_parameters retrieves the statistical descriptors for all the parameters and save a summary .xlsx and .csv files
+
+    Parameters
+    ----------
+    retardance, diattenua, azi, depol : lists
+        the values of the parameters in the ROI, as well as the statistical descriptors
+    path_output : str
+        the path in which the summary files should be saved
+    square_size : int
+        the size of the squares
+    idx : not used
+        
+    Returns
+    -------
+    df : pandas dataframe
+        the summary dataframe
+    """
     retardance_params = get_params_summary(retardance, 'retardance')
     diatten_params = get_params_summary(diattenua, 'diattenuation')
     azi_params = get_params_summary(azi, 'azimuth')
@@ -437,9 +691,38 @@ def save_parameters(retardance, diattenua, azi, depol, path_output, square_size,
         
     return df
 
+def get_params_summary(params, name):
+    """
+    extracts the statistical descriptors only
+    """
+    return [name, params[0], params[1], params[2], params[4]]
+
 def generate_pixel_image(coordinates, path_image, path_save, params = None, mask = None, path_save_align = None, combined = False,
                         save = True, WM = True):
+    """
+    generate_pixel_image overlays the ROIs onto the greyscale images for square images
     
+    Parameters
+    ----------
+    coordinates : list of int
+        [x_min, x_max, y_min, y_max] for the ROI 
+    path_image : str
+        the path to the greyscale image
+    path_save : str
+        the path to the folder in which the overlaid image should be stored
+    mask : array of shape (516, 388)
+        the mask of the ROI
+    path_save_align, save, params - not used anymore
+    combined : boolean
+        indicates if we are selecting automatically multiple squares - option removed
+    WM : boolean
+        indicates if we are working with WM or GM (default : True, changes the color of the ROI borders)
+    
+    
+    Returns
+    ----------
+    the overlay of the ROIs onto the greyscale image
+    """
     if WM:
         val = 0
     else:
@@ -528,6 +811,9 @@ def generate_pixel_image(coordinates, path_image, path_save, params = None, mask
     return imnp_mask.T   
 
 def get_each_image_coordinates(coordinates, square_number, square_size, orientation):
+    """
+    get_each_image_coordinates was used when multiple squares were selected automatically - the option is not present anymore
+    """
     if type(square_size) == int:
         square_size_horizontal = square_size
         square_size_vertical = square_size
@@ -554,6 +840,17 @@ def get_each_image_coordinates(coordinates, square_number, square_size, orientat
 
 
 def generate_histogram(retardance, diattenua, azi, depol, path_folder, idx = None):
+    """
+    generate_histogram is the master function generating a 2x2 figure, containing the histograms and statistical descriptors for the 4 polarimetric parameters of interest
+    
+    Parameters
+    ----------
+    retardance, diattenua, azi, depol : list of float
+        the polarimetric parameter values in a specific ROI
+    path_folder : str
+        the path to the folder in which the histograms should be saved
+    idx - not used anymore
+    """
     fig, ((ax0, ax1), (ax2, ax3)) = plt.subplots(nrows=2, ncols=2, figsize=(15, 10))
 
     n_bins = 100
@@ -588,6 +885,16 @@ def generate_histogram(retardance, diattenua, azi, depol, path_folder, idx = Non
         plt.close(fig)
         
 def add_text(ax, res):
+    """
+    add_text is used to add some text on a figure
+    
+    Parameters
+    ----------
+    ax : matplotlib axis
+        the axis on which to add text
+    res : list
+        the values of the statistics - used to build the text to be displayed
+    """
     ax.text(0.7, 0.8, '$\mu$=' + "%.2f" % res[0] + '$,\ median$=' + "%.2f" % res[4] +'\n$\sigma=$' + "%.2f" % res[1] + '$,\ \max = $' + "%.2f" % res[2], horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     
     
@@ -598,7 +905,28 @@ def add_text(ax, res):
 
 
 def add_all_folders(path_folder, wavelength, pattern = '_FX_', automatic = True):
+    """
+    add_all_folders is the function adding all the images from folders belonging to the same group of measurements (i.e. from the same sample) to be aligned
     
+    Parameters
+    ----------
+    path_folder : str
+        the path to the folder obtained before formalin fixation
+    wavelength : int
+        the wavelength currently studied
+    pattern : str
+        a pattern common to all the folders
+    automatic : not used anymore
+    
+    Returns
+    ----------
+    path_alignment : str
+        the path to the folder that will be aligned
+    path_folders : str
+        the path to the folder containing all the measurements subfolders
+    all_folders : list of str
+        the names of all the measurements subfolders corresponding to the same group of measurements (i.e. from the same sample)
+    """
     end_pattern = path_folder.split('P-T0_FX_')[-1]
     all_folders = find_other_measurements(path_folder, pattern, automatic, end_pattern = end_pattern)
     
@@ -639,12 +967,25 @@ def add_all_folders(path_folder, wavelength, pattern = '_FX_', automatic = True)
 
 
 def find_other_measurements(path_folder, pattern = '_FX_', automatic = False, end_pattern = ''):
-    CUSA = 'CUSA' in path_folder
-        
-    if CUSA:
-        measurement = path_folder.split(pattern)[0].split('_')[-1]
-    else:
-        measurement = path_folder.split(pattern)[1]
+    """
+    find_other_measurements is a function allowing to find all the folders belonging to the same group of measurements (i.e. from the same sample)
+    
+    Parameters
+    ----------
+    path_folder : str
+        the path to the folder obtained before formalin fixation
+    pattern : str
+        a pattern common to all the folders
+    automatic : not used anymore
+    end_pattern : str
+        the pattern that needs to be matched at the end of the measurement folder
+    
+    Returns
+    ----------
+    img : image of shape (516, 388)
+        the ROI overlaid onto the greyscale image
+    """
+    measurement = path_folder.split(pattern)[1]
 
     all_folders = []
     for folder in os.listdir('/'.join(path_folder.split('\\')[:-1])):
@@ -655,6 +996,19 @@ def find_other_measurements(path_folder, pattern = '_FX_', automatic = False, en
 
 
 def create_and_save_mask(imnp_mask):
+    """
+    create_and_save_mask overlays the ROI masks onto the greyscale image
+    
+    Parameters
+    ----------
+    imnp_mask : array of shape (516, 388)
+        the ROI mask
+    
+    Returns
+    ----------
+    img : image of shape (516, 388)
+        the ROI overlaid onto the greyscale image
+    """
     imnp_masked = []
     for line in imnp_mask:
         line_mask = []
@@ -683,13 +1037,29 @@ def create_and_save_mask(imnp_mask):
 
 
 def generate_combined_mask(propagation_list):
+    """
+    generate_combined_mask generates a combined mask, compiling the masks generated for each ROI into a single one to fasten up the process
+    
+    Parameters
+    ----------
+    propagation_list : list
+        a list containing the information about the ROIs (such as the origin measurement name, the square size...)
+    
+    Returns
+    ----------
+    propagation_list : list
+        a list containing the information about the ROIs (such as the origin measurement name, the square size...) updated with the new path for the propagation folder
+    """
     masks = []
     imgs = {}
+    
+    # obtain all the ROIs masks
     for file in os.listdir('alignment/to_align/'):
         for img_path in os.listdir(os.path.join('alignment/to_align/', file, 'mask')):
             im = plt.imread(os.path.join('alignment/to_align/', file, 'mask', img_path))
             imgs[int(img_path.split('WM_')[-1].split('GM_')[-1].split('_')[0])] = im
-            
+    
+    # compile them in a single mask
     base = np.zeros(imgs[1].shape)
     for val, img in imgs.items():
         assert val < 255
@@ -722,7 +1092,16 @@ def generate_combined_mask(propagation_list):
         prop[-2] = path_folder_propagation
     return propagation_list
 
+
 def do_alignment():
+    """
+    do_alignment is the function calling the matlab pipeline to align the images and propagate the ROIs
+    
+    Returns
+    ----------
+    output_folders : dict
+        a dict linking the folder path to the 'to_align' to the ones in the 'aligned' subfolder
+    """
     path_alignment_batch = os.getcwd() + '\\alignment\\to_align'
     with open('RegistrationElastix/temp/path_alignment_batch.txt', 'w') as f:
         f.write(path_alignment_batch)
@@ -745,8 +1124,16 @@ def do_alignment():
     eng.addpath(s, nargout=0)
     eng.python_call(nargout=0)
     
-def move_computed_folders():
     
+def move_computed_folders():
+    """
+    move_computed_folders is a function moving the aligned folders forom the subfolder 'to_align' to the subfolder 'aligned'
+    
+    Returns
+    ----------
+    output_folders : dict
+        a dict linking the folder path to the 'to_align' to the ones in the 'aligned' subfolder
+    """
     folder_names = []
     log_name = []
     for fname in os.listdir('alignment/to_align/'):
@@ -755,6 +1142,7 @@ def move_computed_folders():
         else:
             log_name.append('alignment/to_align/' + fname)
 
+    # create the dictionnary linking the folder path to the 'to_align' to the ones in the 'aligned' subfolder
     output_folders = {}
     for folder_name in folder_names:
         output_folder = 'alignment/aligned/'
@@ -766,18 +1154,24 @@ def move_computed_folders():
             output_folder = output_folder + folder_name.split('/')[-1]
             output_folders[folder_name] = output_folder
         
+    # actually move the folders
     for source, target in output_folders.items():
         folder_name_ = target.split('/')[-1]
         shutil.move(source, target)
         os.rename(target + '/' + folder_name_, target + '/results')
     
+    # and the logboooks
     output_folder = 'alignment/aligned/logbooks/'
     for log in log_name:
         shutil.move(log, output_folder)
     
     return output_folders
 
+
 def create_shortcut(path_images, path_folder):
+    """
+    create_shortcut is a function to create a shortcut to the aligned images folder - not used anymore
+    """
     path = os.path.join(path_folder, 'aligned_images.lnk')
     target = path_images
     icon = path_images
@@ -794,129 +1188,43 @@ def create_shortcut(path_images, path_folder):
 #######################################         6. Propagated data collection        ######################################
 ###########################################################################################################################
 
-def check_outliers_propagation(all_folders, path_alignment, new_folder_name, mask_matter_after, mask_matter_after_opposite, 
-                               elastic = True, check_outliers_bool = False):
-    
-    elastic = True
-
-    for directory in os.listdir('alignment/aligned/'):
-        if path_alignment.split('/')[-1] in directory:
-            path_aligned = 'alignment/aligned/' + directory + '/results'
-            path_aligned_root = 'alignment/aligned/' + directory
-    assert path_aligned != None and path_aligned_root != None
-
-    to_remove = []
-    
-    base_folder = path_alignment.split('/')[-1].split('__')[0]
-    
-    for folder in all_folders:
-
-        path_image = None
-        img_of_interest = []
-        for img in os.listdir(path_aligned + '/invReg'):
-            if folder in img and '_PrpgTo_' in img and 'AffineElastic_TransformParameters' in img and '.png' in img:
-                img_of_interest.append(img)
-        assert len(img_of_interest) == 2
-
-        for img in img_of_interest:
-            if img.endswith('1.png') and elastic:
-                path_image = path_aligned + '/invReg/' + img
-            elif img.endswith('0.png') and not elastic:
-                path_image = path_aligned + '/invReg/' + img
-            
-        mask = load_image(path_image, new_folder_name)
-        
-        if check_outliers(mask, mask_matter_after, mask_matter_after_opposite):
-            to_remove.append(new_folder_name)
-        
-    return to_remove
-
-
-def check_outliers(mask, mask_matter_after, mask_matter_after_opposite):
-    corrupt = False
-    
-    opposite = 0
-    same = 0
-    total = 0
-    
-    for idx, x in enumerate(mask):
-        for idy, y in enumerate(x):
-            if y > 0:
-                total += 1
-                if idx == 0 or idy == 0:
-                    corrupt = True
-                elif idx == mask.shape[0] - 1 or idx == mask.shape[1] - 1:
-                    corrupt = True
-                elif mask_matter_after[idx, idy] == 1:
-                    same += 1
-                elif mask_matter_after_opposite[idx, idy] == 1:
-                    opposite += 1
-    
-    try:
-        if same/total > 0.50 or (same/total > 0.30 and same/opposite == 0):
-            pass
-        else:
-            corrupt = True
-    except:
-        pass
-    return corrupt
-
-
-def collect_data_propagated(WM, new_folder_names, new_dates, old_folder_name, old_date, path_folder, propagation_list, output_folders):
-    if WM:
-        type_ = 'WM'
-    else:
-        type_ = 'GM'
-
-    mask_matter_afters = []
-    mask_matter_after_opposites = []
-    
-    for idx, (new_name, new_date) in enumerate(zip(new_folder_names,new_dates)):
-        _ = get_masks(path_folder.replace(old_folder_name, new_name).replace(old_date, new_date))
-        path_annotation = os.path.join(path_folder.replace(old_folder_name, new_name).replace(old_date, new_date),
-                                           'annotation')
-        WM_mask = plt.imread(os.path.join(path_annotation, 'WM_merged.png'))
-        GM_mask = plt.imread(os.path.join(path_annotation, 'GM_merged.png'))
-        if WM:
-            mask_matter_afters.append(WM_mask)
-            mask_matter_after_opposites.append(GM_mask)
-        else:
-            mask_matter_afters.append(GM_mask)
-            mask_matter_after_opposites.append(WM_mask)
-
-    remove = []
-
-    for element in propagation_list:
-        new_folder_name, all_folders, path_folders, wavelength, path_alignment, square_size = element
-
-        for idx, (all_folder, mask_matter_after, mask_matter_after_opposite, new_name) in enumerate(zip(all_folders[1:],
-                                                            mask_matter_afters, mask_matter_after_opposites, new_folder_names)):
-
-            to_remove = check_outliers_propagation([all_folder], path_alignment, new_folder_name, mask_matter_after, 
-                                                       mask_matter_after_opposite, elastic = True, check_outliers_bool = True)
-
-            if len(to_remove) > 0:
-                remove.append([to_remove[0], new_name])
-
-            data, dfs, aligned_images_path = propagate_measurements(new_folder_name, [all_folder], 
-                                                    path_folders, wavelength, output_folders[path_alignment], 
-                                                    square_size, mask_matter_after, mask_matter_after_opposite,
-                                                    check_outliers_bool = False, create_dir = True)
-
-            with open(os.path.join(path_folders, all_folder, 'polarimetry', '550nm', '50x50_images', 
-                                new_folder_name + '_align', 'data_raw' + '.pickle'), 'wb') as handle:
-                pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    with open(os.path.join(path_folders, all_folders[0], 'polarimetry', '550nm', '50x50_images', 
-                        'to_rm_' + type_ + '.pickle'), 'wb') as handle:
-        pickle.dump(remove, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    generate_summary_file(propagation_list)
-    
-    
 def propagate_measurements(new_folder_name, all_folders, path_folders, wavelength, path_alignment, 
                            square_size, mask_matter_after, mask_matter_after_opposite, check_outliers_bool = False, 
                            create_dir = False):
+    """
+    propagate_measurements is the master function used to propagate the ROIs and collect the data for the 
+    measurement made after FF for one ROI
+
+    Parameters
+    ----------
+    new_folder_name : str
+        the name of the 50x50 folder for a specific ROI 
+    all_folders : list
+        the folders of the measurements after formalin fixation
+    path_folders : str
+        the path to the folder containing all the measurements
+    wavelength : int
+        the wavelenght currently analysed
+    path_alignment : str
+        the path to the aligned folder
+    square_size : int
+        the size of the ROI squares
+    mask_matter_after, mask_matter_after_opposite : array of shape (516, 388)
+        the annotation masks (one for the same tissue type and one for the opposite)
+    create_dir : bool
+        indicates if a new output dir should be created (default : False)
+    check_outliers_bool : bool
+        indicates if we the outliers should be checked (default : False)
+    
+    Returns
+    ----------
+    data : list
+        the values of the polarimetric parameters for each folder studied
+    dfs : list of pandas dataframe
+        the statistic descriptors of the polarimetric parameters in a dataframe format
+    aligned_images_path : str
+        the path to the aligned images
+    """
     output_directory = get_output_directory_name(new_folder_name, all_folders, path_folders, wavelength)
     
     if create_dir:
@@ -942,38 +1250,45 @@ def propagate_measurements(new_folder_name, all_folders, path_folders, wavelengt
         return data, dfs, aligned_images_path
     
     
-def create_output_dir(output_directory, all_folders, path_folders, wavelength):
-    for folder in all_folders:
-        path_folder_50x50 = path_folders + '/' + folder + '/polarimetry/' + str(wavelength) + 'nm/50x50_images/'
-        os.mkdir(path_folder_50x50 + output_directory)
-    
-    
-def get_output_directory_name(new_folder_name, all_folders, path_folders, wavelength):
-    new_folder_name = new_folder_name + '_align'
-    new_folder_free = True
-    if not new_folder_name:
-        new_folder_free = False
-        
-    number = 0
-    for folder in all_folders:
-        path_folder_50x50 = path_folders + '/' + folder + '/polarimetry/' + str(wavelength) + 'nm/50x50_images/'
-        folders_ = os.listdir(path_folder_50x50)
-        if new_folder_name in folders_:
-            new_folder_free = False
-        folder_number = len(folders_)
-        if folder_number > number:
-            number = folder_number
-            
-    if new_folder_free:
-        return new_folder_name
-    else:
-        return str(number) + '_align'
-    
-    
+
 def get_data_propagation(output_directory, all_folders, path_folders, wavelength, path_alignment, square_size, 
                          new_folder_name, mask_matter_after, mask_matter_after_opposite, elastic = True, 
                          check_outliers_bool = False, create_dir = False):
+    """
+    this function allows to extract the values of the polarimetric parameters in the propagated ROIs
+
+    Parameters
+    ----------
+    output_directory : str
+        the name of the 50x50 folder in which the data should be stored
+    all_folders : list
+        the folders of the measurements after formalin fixation
+    path_folders : str
+        the path to the folder containing all the measurements
+    wavelength : int
+        the wavelenght currently analysed
+    path_alignment : str
+        the path to the aligned folder
+    square_size : int
+        the size of the ROI squares
+    mask_matter_after, mask_matter_after_opposite : array of shape (516, 388)
+        the annotation masks (one for the same tissue type and one for the opposite)
+    create_dir : bool
+        indicates if a new output dir should be created (default : False)
+    check_outliers_bool : bool
+        indicates if we the outliers should be checked (default : False)
+    elastic : bool
+        indicates if elastic registration was used (default : True)
     
+    Returns
+    ----------
+    data : list
+        the values of the polarimetric parameters for each folder studied
+    dfs : list of pandas dataframe
+        the statistic descriptors of the polarimetric parameters in a dataframe format
+    aligned_images_path : str
+        the path to the aligned images
+    """
     # get the path to the folder containing the aligned images
     path_aligned = None
     path_aligned_root = None
@@ -1030,7 +1345,7 @@ def get_data_propagation(output_directory, all_folders, path_folders, wavelength
 
             # load the propagated mask image
             angle = 0
-            mask = load_image(path_image, new_folder_name)
+            mask = load_propagated_mask(path_image, new_folder_name)
             
             # load the data (polarimetric parameters)
             linear_retardance, diattenuation, azimuth, depolarization, mat = load_data_mm(path_folder, wavelength)
@@ -1059,8 +1374,271 @@ def get_data_propagation(output_directory, all_folders, path_folders, wavelength
     return data, dfs, aligned_images_path
 
 
-def generate_summary_file(propagation_list):
+def get_output_directory_name(new_folder_name, all_folders, path_folders, wavelength):
+    """
+    get_output_directory_name allows to obtain the name of the 50x50 folder that should be used to store the data for the next ROI
+
+    Parameters
+    ----------
+    new_folder_name : str
+        the name of the previous 50x50 folder
+    all_folders : list
+        the folders of the measurements after formalin fixation
+    path_folders : str
+        the path to the folder containing all the measurements
+    wavelength : int
+        the wavelenght currently analysed
     
+    Returns
+    ----------
+    new_folder_name : str 
+        the name of the 50x50 folder that should be used to store the data for the next ROI
+    """
+    new_folder_name = new_folder_name + '_align'
+    new_folder_free = True
+    if not new_folder_name:
+        new_folder_free = False
+        
+    number = 0
+    for folder in all_folders:
+        path_folder_50x50 = path_folders + '/' + folder + '/polarimetry/' + str(wavelength) + 'nm/50x50_images/'
+        folders_ = os.listdir(path_folder_50x50)
+        if new_folder_name in folders_:
+            new_folder_free = False
+        folder_number = len(folders_)
+        if folder_number > number:
+            number = folder_number
+            
+    if new_folder_free:
+        return new_folder_name
+    else:
+        return str(number) + '_align'
+ 
+
+def create_output_dir(output_directory, all_folders, path_folders, wavelength):
+    """
+    create_output_dir creates the directory using the name given by get_output_directory_name
+
+    Parameters
+    ----------
+    output_directory : str
+        the name of the 50x50 folder that should be used to store the data for the next ROI
+    all_folders : list
+        the folders of the measurements after formalin fixation
+    path_folders : str
+        the path to the folder containing all the measurements
+    wavelength : int
+        the wavelenght currently analysed
+        
+    """
+    for folder in all_folders:
+        path_folder_50x50 = path_folders + '/' + folder + '/polarimetry/' + str(wavelength) + 'nm/50x50_images/'
+        os.mkdir(path_folder_50x50 + output_directory)
+        
+    
+def check_outliers_propagation(all_folders, path_alignment, new_folder_name, mask_matter_after, mask_matter_after_opposite, 
+                               elastic = True, check_outliers_bool = False):
+    """
+    check_outliers_propagation is the master function to select and load the mask associated to a specific ROI, and to verify
+    if it is an outlier (defined as ROI moving from grey/white matter to white/grey matter or background)
+
+    Parameters
+    ----------
+    all_folders : list
+        the names of all folders
+    path_alignment : str
+        the path to the alignement folder
+    new_folder_name : str
+        the 50x50 folder
+    mask_matter_after, mask_matter_after_opposite : array of shape (516, 388)
+        the annotation masks (one for the same tissue type and one for the opposite)
+    elastic : bool
+        indicates if we are using elastic registration (default : True)
+    check_outliers_bool : bool
+        indicates if we the outliers should be checked (default : True)
+    
+    Returns
+    ----------
+    to_remove : list
+        the list of the ROIs to remove for further analyses
+    """    
+    elastic = True
+
+    for directory in os.listdir('alignment/aligned/'):
+        if path_alignment.split('/')[-1] in directory:
+            path_aligned = 'alignment/aligned/' + directory + '/results'
+            path_aligned_root = 'alignment/aligned/' + directory
+    assert path_aligned != None and path_aligned_root != None
+
+    to_remove = []
+    
+    base_folder = path_alignment.split('/')[-1].split('__')[0]
+    
+    for folder in all_folders:
+
+        path_image = None
+        img_of_interest = []
+        for img in os.listdir(path_aligned + '/invReg'):
+            if folder in img and '_PrpgTo_' in img and 'AffineElastic_TransformParameters' in img and '.png' in img:
+                img_of_interest.append(img)
+        assert len(img_of_interest) == 2
+
+        for img in img_of_interest:
+            if img.endswith('1.png') and elastic:
+                path_image = path_aligned + '/invReg/' + img
+            elif img.endswith('0.png') and not elastic:
+                path_image = path_aligned + '/invReg/' + img
+            
+        mask = load_propagated_mask(path_image, new_folder_name)
+        
+        if check_outliers(mask, mask_matter_after, mask_matter_after_opposite):
+            to_remove.append(new_folder_name)
+        
+    return to_remove
+
+
+def check_outliers(mask, mask_matter_after, mask_matter_after_opposite):
+    """
+    check_outliers is function checking if a ROI should be removed because if it is an outlier 
+    (defined as ROI moving from grey/white matter to white/grey matter or background)
+
+    Parameters
+    ----------
+    mask : array of shape (516, 388)
+        the mask indicating the location of the ROI
+    mask_matter_after, mask_matter_after_opposite : array of shape (516, 388)
+        the annotation masks (one for the same tissue type and one for the opposite)
+    
+    Returns
+    ----------
+    corrupt : boolean
+        indicates if the ROI is an outlier
+    """
+    corrupt = False
+    
+    opposite = 0
+    same = 0
+    total = 0
+    
+    for idx, x in enumerate(mask):
+        for idy, y in enumerate(x):
+            if y > 0:
+                total += 1
+                
+                # 1. if the ROI is located at the border
+                if idx == 0 or idy == 0:
+                    corrupt = True
+                elif idx == mask.shape[0] - 1 or idx == mask.shape[1] - 1:
+                    corrupt = True
+                
+                # 2. if the pixel is labelled with the same tissue type 
+                elif mask_matter_after[idx, idy] == 1:
+                    same += 1
+                
+                # 3. if the pixel is labelled with another tissue type 
+                elif mask_matter_after_opposite[idx, idy] == 1:
+                    opposite += 1
+    
+    try:
+        # check if at least 50% of the pixels are the same tissue type, or at least 30% and the rest is located in background
+        if same/total > 0.50 or (same/total > 0.30 and same/opposite == 0):
+            pass
+        else:
+            corrupt = True
+    except:
+        pass
+
+    return corrupt
+
+
+def collect_data_propagated(WM, new_folder_names, new_dates, old_folder_name, old_date, path_folder, propagation_list, output_folders):
+    """
+    check_outliers is function checking if a ROI should be removed because if it is an outlier 
+    (defined as ROI moving from grey/white matter to white/grey matter or background)
+
+    Parameters
+    ----------
+    WM : boolean
+        indicates if we are working with grey or white matter
+    new_folder_names : list
+        the folders of the measurements after formalin fixation
+    new_dates : list
+        the dates of the measurements after formalin fixation
+    old_folder_name : str
+        the name of the folder of the measurements before formalin fixation
+    old_date : str
+        the date of the measurements before formalin fixation
+    path_folder : str
+        the path to the measurement made before formalin fixation
+    propagation_list : dict
+        a dicationnary linking the information of the alignment and the folder currently analyzed
+    output_folders : dict
+    
+    Returns
+    ----------
+    corrupt : boolean
+        indicates if the ROI is an outlier
+    """
+    if WM:
+        type_ = 'WM'
+    else:
+        type_ = 'GM'
+
+    mask_matter_afters = []
+    mask_matter_after_opposites = []
+    
+    for idx, (new_name, new_date) in enumerate(zip(new_folder_names,new_dates)):
+        _ = get_masks(path_folder.replace(old_folder_name, new_name).replace(old_date, new_date), bg = False)
+        path_annotation = os.path.join(path_folder.replace(old_folder_name, new_name).replace(old_date, new_date),
+                                           'annotation')
+        WM_mask = plt.imread(os.path.join(path_annotation, 'WM_merged.png'))
+        GM_mask = plt.imread(os.path.join(path_annotation, 'GM_merged.png'))
+        if WM:
+            mask_matter_afters.append(WM_mask)
+            mask_matter_after_opposites.append(GM_mask)
+        else:
+            mask_matter_afters.append(GM_mask)
+            mask_matter_after_opposites.append(WM_mask)
+
+    remove = []
+
+    for element in propagation_list:
+        new_folder_name, all_folders, path_folders, wavelength, path_alignment, square_size = element
+
+        for idx, (all_folder, mask_matter_after, mask_matter_after_opposite, new_name) in enumerate(zip(all_folders[1:],
+                                                            mask_matter_afters, mask_matter_after_opposites, new_folder_names)):
+
+            to_remove = check_outliers_propagation([all_folder], path_alignment, new_folder_name, mask_matter_after, 
+                                                       mask_matter_after_opposite, elastic = True, check_outliers_bool = True)
+
+            if len(to_remove) > 0:
+                remove.append([to_remove[0], new_name])
+
+            data, dfs, aligned_images_path = propagate_measurements(new_folder_name, [all_folder], 
+                                                    path_folders, wavelength, output_folders[path_alignment], 
+                                                    square_size, mask_matter_after, mask_matter_after_opposite,
+                                                    check_outliers_bool = False, create_dir = True)
+
+            with open(os.path.join(path_folders, all_folder, 'polarimetry', '550nm', '50x50_images', 
+                                new_folder_name + '_align', 'data_raw' + '.pickle'), 'wb') as handle:
+                pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    with open(os.path.join(path_folders, all_folders[0], 'polarimetry', '550nm', '50x50_images', 
+                        'to_rm_' + type_ + '.pickle'), 'wb') as handle:
+        pickle.dump(remove, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    generate_summary_file(propagation_list)
+    
+
+def generate_summary_file(propagation_list):
+    """
+    function that generates the summary files (.csv and .xlsx) and store them in the correct folders
+
+    Parameters
+    ----------
+    propagation_list : dict
+        a dicationnary linking the information of the alignment and the folder currently analyzed
+    """ 
     new_folder_names = []
     all_folders = None
     path_folders = None
@@ -1072,6 +1650,7 @@ def generate_summary_file(propagation_list):
         
     for new_folder_name in new_folder_names:
         
+        # create the individual summaries, for each folder
         summaries = []
         for folder in all_folders:
             path_50x50_folder = get_path_50x50_folder(path_folders, folder, new_folder_name, wavelength)
@@ -1082,6 +1661,7 @@ def generate_summary_file(propagation_list):
         result = pd.concat(summaries)
         result = result.sort_values(['fname', 'parameter']).set_index(['fname', 'parameter'])
         
+        # create the summaries for all the measurements combined
         for folder in all_folders:
             path_50x50_folder = get_path_50x50_folder(path_folders, folder, new_folder_name, wavelength, aligned = True)
             result.to_csv(os.path.join(path_50x50_folder, 'summary_aligned.csv'))
@@ -1089,6 +1669,27 @@ def generate_summary_file(propagation_list):
             
             
 def get_path_50x50_folder(path_folders, folder, new_folder_name, wavelength, aligned = False):
+    """
+    returns the path to the 50x50_folder in which the summary files (.csv and .xlsx) should be stored
+
+    Parameters
+    ----------
+    path_folders : str
+        the path to the data folder
+    folder : str
+        the name of the folder being considered
+    new_folder_name : str
+        the 50x50 folder
+    wavelength : int
+        the wavelenght currently studied
+    aligned : bool
+        indicated if we are using aligned folders (the target is different)
+    
+    Returns
+    ----------
+    path_50x50_folder : str
+        the path to the 50x50_folder in which the summary files (.csv and .xlsx) should be stored
+    """    
     path_50x50 = os.path.join(path_folders, folder, 'polarimetry', str(wavelength) + 'nm', '50x50_images')
     if os.path.exists(os.path.join(path_50x50, new_folder_name)):
         if aligned:
@@ -1104,7 +1705,22 @@ def get_path_50x50_folder(path_folders, folder, new_folder_name, wavelength, ali
     return path_50x50_folder
 
 
-def load_image(path_image, new_folder_name = 'WM_1'):
+def load_propagated_mask(path_image, new_folder_name = 'WM_1'):
+    """
+    load the propagated mask from the image loacated at the path given as an input
+
+    Parameters
+    ----------
+    path_image : str
+        the path to the image
+    new_folder_name : str
+        the 50x50 folder (default : 'WM_1')
+    
+    Returns
+    ----------
+    imnp : array of shape (516, 388)
+        the mask for the ROI
+    """    
     val = int(new_folder_name.split('_')[-1])
     
     im = Image.open(path_image)
@@ -1119,139 +1735,50 @@ def load_image(path_image, new_folder_name = 'WM_1'):
 
 
 
-###########################################################################################################################
-###########################################         7. Show the histograms        #########################################
-###########################################################################################################################
-
-def parameters_histograms(MM, xs, ys, path_res):
-    """
-    generate the histogram for the four parameters
-
-    Parameters
-    ----------
-    MuellerMatrices : dict
-        the dictionnary containing the computed Mueller Matrices
-    folder : path
-        the name of the current processed folder
-    parameters_map : dict
-        the map linking the keys in the MM and the name of the parameter
-    logbook : file
-        the logbook file
-    max_ : bool
-        boolean indicating wether or not the max_ should be printed
-    """    
-    parameters_map = {'linR': ['Linear retardance (°)', False, False, False, False],
-    'totP': ['Depolarization', False, True, False, False],
-     'totD': ['Diattenuation', False, False, True, False],
-     'M11': ['Intensity', False, False, False, True],
-     'azimuth': ['Azimuth of optical axis (°)', True, False, False, False]}
-    
-    try:
-        parameters_map.pop('M11')
-    except:
-        pass
-    
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(15,11))
-    
-    data_all = {}
-    
-    for i, (key, param) in zip(range(0,4), parameters_map.items()):
-        row = i%2
-        col = i//2
-        ax = axes[row, col]
-
-        # change the range of the histograms
-        if param[2]:
-            range_hist = (0, 1)
-        elif param[1]:
-            range_hist = (0, 180)
-        elif param[3]:
-            range_hist = (0, 0.20)
-        else:
-            range_hist = (0, 60)
-        
-        data_MM = []
-        for idx, x in enumerate(MM[key]):
-            for idy, y in enumerate(x):
-                if MM['Msk'][idx, idy] and xs[0] < idx < xs[1] and ys[0] < idy < ys[1]:
-                    data_MM.append(y)
-                    
-        data_all[param[0]] = data_MM
-        
-        y, x = np.histogram(
-            data_MM,
-            bins=50,
-            density=False,
-            range = range_hist)
-        
-        x_plot = []
-        for idx, x_ in enumerate(x):
-            try: 
-                x_plot.append((x[idx] + x[idx + 1]) / 2)
-            except:
-                pass
-                # assert len(x_plot) == 30
-        
-        # get the mean, max and std
-        max_ = x[np.argmax(y)]
-        mean = np.nanmean(data_MM)
-        std = np.nanstd(data_MM)
-        
-        y = y / np.max(y)
-        
-        # plot the histogram
-        ax.plot(x_plot,y, c = 'black', linewidth=3)
-        ax.axis(ymin=0,ymax=1.5)
-        ax.locator_params(axis='y', nbins=4)
-        ax.locator_params(axis='x', nbins=5)
-    
-        if max_:
-            ax.text(0.8, 0.9, '$\mu$ = {:.3f}\n$\sigma$ = {:.3f}'.format(mean, std, max_), 
-                    horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, 
-                    fontsize=16, fontweight = 'bold')
-        else:
-            ax.text(0.8, 0.9, '$\mu$ = {:.3f}\n$\sigma$ = {:.3f}'.format(mean, std), 
-                    horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, 
-                    fontsize=16, fontweight = 'bold')
-        
-        for tick in ax.xaxis.get_major_ticks():
-            tick.label1.set_fontsize(20)
-            tick.label1.set_fontweight('bold')
-        for tick in ax.yaxis.get_major_ticks():
-            tick.label1.set_fontsize(20)
-            tick.label1.set_fontweight('bold')
-            
-        # ax.set_title(param[0], fontdict = {'fontsize': 30, 'fontweight': 'bold'})
-        ax.set_ylabel('Normalized pixel number', fontdict = {'fontsize': 20, 'fontweight': 'bold'})
-        
-    # save the figures
-    plt.tight_layout()
-    plt.savefig(os.path.join(path_res, 'parameters_histogram.png'))
-    plt.savefig(os.path.join(path_res, 'parameters_histogram.pdf'))
-    
-    plt.close()
-    
-    return data_all
 
 def subtract_angle(targetA, sourceA):
+    """
+    Computes the unsigned difference between two angles
+
+    Parameters
+    -------
+    targetA : float
+        angle (between 0 and 180°)
+    sourceA : float
+        angle (between 0 and 180°)
+    
+    Returns
+    -------
+    difference : float
+        the unsigned difference between two angles
+    """
     a = targetA - sourceA
     return abs((a + 90) % 180 - 90)
 
-def average_angles(angles):
-    """Average (mean) of angles
-
-    Return the average of an input sequence of angles. The result is between
-    ``0`` and ``2 * math.pi``.
-    If the average is not defined (e.g. ``average_angles([0, math.pi]))``,
-    a ``ValueError`` is raised.
+def average_angles(angles_s):
     """
+    Return the average of an input sequence of angles. The result is between 0 and 180°.
 
+    Parameters
+    -------
+    angles_s : list
+        the input angles
+    
+    Returns
+    -------
+    average_angle : float
+        the average angle for the input sequence (between 0 and 180°)
+    """
+    angles = []
+    for a in angles_s:
+        if a != 0:
+            angles.append(a)
     x = sum(math.cos(a * 2*math.pi/180) for a in angles)
     y = sum(math.sin(a * 2*math.pi/180) for a in angles)
-
     if x == 0 and y == 0:
         raise ValueError(
             "The angle average of the inputs is undefined: %r" % angles)
-
-    # To get outputs from -pi to +pi, delete everything but math.atan2() here.
-    return 180 * math.fmod(math.atan2(y, x) + 2 * math.pi, 2 * math.pi) / (2*math.pi)
+    average_angle = math.atan2(y, x)
+    average_angle = math.fmod(average_angle + 2 * math.pi, 2 * math.pi)
+    average_angle = (average_angle * 180 / (2*math.pi))
+    return average_angle

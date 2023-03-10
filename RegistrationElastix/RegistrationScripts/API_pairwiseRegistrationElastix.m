@@ -16,12 +16,14 @@ if exist(elastixFileName,'file') && exist(fixedFileName,'file') && ...
     for pp = 1 : size(paramFileName)
         cmd = cat(2,cmd,' -p ', paramFileName{pp});
     end
-        
+      
     if OPTs.VerboseFlag
         status = system( cmd , '-echo' );
     else
         [status,~] = system( cmd );
     end
+
+    disp(cmd)
     successFlag = status == 0;
 else
     disp(' <!> API_pairwiseRegistrationElastix: Incorrect Inputs - Abort.');

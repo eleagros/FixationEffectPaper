@@ -52,7 +52,7 @@ def load_variables_and_paths(path_fixation_folder, match_sequence = '', waveleng
         path_annotation = os.path.join(folder_of_interest, 'annotation', 'merged.jpeg')
 
         path_polarimetry = os.path.join(folder_of_interest, 'polarimetry', wavelength)
-        path_MM = os.path.join(path_polarimetry, 'MM.pickle')
+        path_MM = os.path.join(path_polarimetry, 'MM.npz')
 
         for f in os.listdir(path_polarimetry):
             if '_realsize.png' in f:
@@ -71,9 +71,8 @@ def load_variables_and_paths(path_fixation_folder, match_sequence = '', waveleng
                 else:
                     im_annotated[idx, idy] = 255
 
-        with open(path_MM, 'rb') as handle:
-            MM = pickle.load(handle)
-
+        MM = np.load(path_MM)
+        
         MM_light = {}
         for key, val in MM.items():
             if key in to_keep:
@@ -140,7 +139,7 @@ def combine_masks(masks):
     return base
 
 
-def get_masks(path):
+def get_masks(path, bg = True):
     """
     obtain the masks (white matter, grey matter and background) by combining previsously manually drawn masks
 
@@ -178,7 +177,6 @@ def get_masks(path):
         elif 'merged' in file or 'mask-viz' in file or 'mask_total' in file:
             pass
         else:
-            print(file)
             raise(NotImplementedError)
     
     
@@ -188,7 +186,7 @@ def get_masks(path):
     GM = np.zeros(WM.shape)
     
     # return the merged masks
-    return merge_masks(BG, WM, GM, path)
+    return merge_masks(BG, WM, GM, path, bg)
 
 
 def combine_masks(masks):
@@ -222,7 +220,7 @@ def combine_masks(masks):
     return base
 
 
-def merge_masks(BG, WM, GM, path):
+def merge_masks(BG, WM, GM, path, bg):
     """
     merge masks is used to merge the previsously combined manually drawn masks
 
@@ -256,20 +254,37 @@ def merge_masks(BG, WM, GM, path):
     for idx, x in enumerate(WM):
         for idy, y in enumerate(x):
             
-            # 1. check if it is background
-            if BG[idx, idy] == 255:
-                BG_merged[idx, idy] = 255
-                all_merged[idx, idy] = 128
+            if bg:
+                # 1. check if it is background
+                if BG[idx, idy] == 255:
+                    BG_merged[idx, idy] = 255
+                    all_merged[idx, idy] = 128
                 
-            # 2. if not, check if the pixel is white matter
-            elif WM[idx, idy] == 255:
-                WM_merged[idx, idy] = 255
-                all_merged[idx, idy] = 0
-                   
-            # 3. if not, it is grey matter
+                # 2. if not, check if the pixel is white matter
+                elif WM[idx, idy] == 255:
+                    WM_merged[idx, idy] = 255
+                    all_merged[idx, idy] = 0
+                    
+                # 3. if not, it is grey matter
+                else:
+                    GM_merged[idx, idy] = 255
+                    all_merged[idx, idy] = 255
+            
             else:
-                GM_merged[idx, idy] = 255
-                all_merged[idx, idy] = 255
+                # 1. check if it is background
+                if WM[idx, idy] == 255:
+                    WM_merged[idx, idy] = 255
+                    all_merged[idx, idy] = 0
+
+                # 2. if not, check if the pixel is white matter
+                elif BG[idx, idy] == 255:
+                    BG_merged[idx, idy] = 255
+                    all_merged[idx, idy] = 128
+                    
+                # 3. if not, it is grey matter
+                else:
+                    GM_merged[idx, idy] = 255
+                    all_merged[idx, idy] = 255
 
     # save the masks
     save_image(path, WM_merged, 'WM_merged')
@@ -279,6 +294,7 @@ def merge_masks(BG, WM, GM, path):
     if new_p.mode != 'L':
         new_p = new_p.convert('L')
         new_p.save(os.path.join(path, 'merged.jpeg'))
+        new_p.save(os.path.join(path, 'merged.png'))
         
     return BG_merged, WM_merged, GM_merged, all_merged
 
@@ -766,7 +782,7 @@ def plot_distances_and_std(x_scaled_sorted, organized_by_distance_means, organiz
     [label.set_fontsize(14) for label in labels]
 
     ax.text(-2.2, 0.82, 'White matter', fontsize=16, fontweight = 'bold')
-    ax.text(0.75, 0.96, 'Gray matter', fontsize=16, fontweight = 'bold')
+    ax.text(0.75, 0.96, 'Grey matter', fontsize=16, fontweight = 'bold')
 
     ax.annotate("", xy=(-2, 0.8), xytext=(-0.5, 0.8),
                 arrowprops=dict(arrowstyle="->"))
@@ -822,6 +838,7 @@ def fit_and_plot_sigmoid(x_scaled_sorted, organized_by_distance_means, folder_sa
 
     # 2. fit the curve to th sigmoid
     popt, pcov = curve_fit(sigmoid, x_scaled_sorted, organized_by_distance_means, p0, method='dogbox')
+    print(popt, pcov)
 
     # 3. find the elbows of the function
     x_long = np.arange(min(x_scaled_sorted) - 0.2, 0.5, 0.0001)
@@ -909,7 +926,7 @@ def plot_with_sigmoid(x_scaled_sorted, organized_by_distance_means, x_long, y_fi
     [label.set_fontsize(14) for label in labels]
 
     ax.text(-2.3, 0.82, 'White matter', fontsize=16, fontweight = 'bold')
-    ax.text(1, 0.96, 'Gray matter', fontsize=16, fontweight = 'bold')
+    ax.text(1, 0.96, 'Grey matter', fontsize=16, fontweight = 'bold')
 
     ax.annotate("", xy=(-2.2, 0.8), xytext=(-0.8, 0.8),
                 arrowprops=dict(arrowstyle="->"))

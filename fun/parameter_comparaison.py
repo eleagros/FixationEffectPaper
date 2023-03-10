@@ -649,7 +649,7 @@ def t_test(data_all, times, param_interest):
                 # iterate over each metric
                 for metric, val in value.items():
                     
-                    if metric == param_interest:
+                    if metric == 'mean':
                         paired_t_test_time = {}
 
                         # and perform the t_test, comparing either the two series or the CV with 0
@@ -661,9 +661,6 @@ def t_test(data_all, times, param_interest):
                             n_2 = len(after)
 
                             stat, p_val = mannwhitneyu(before, after)
-                            
-                            before = val.dropna()[times[1]]
-                            after = val.dropna()[time]
                             paired_t_test_time[time] = [stat, p_val, n_1, n_2, np.mean(before), 
                                                             np.std(before), np.mean(after), np.std(after)]
                         paired_t_test_metric[metric] = paired_t_test_time
@@ -692,8 +689,8 @@ def t_test(data_all, times, param_interest):
 
                             stat, p_val = mannwhitneyu(before, after)
                             
-                            before = val.dropna()[times[1]]
-                            after = val.dropna()[time]
+                            before = val[times[1]].dropna()
+                            after = val[time].dropna()
                             paired_t_test_time[time] = [stat, p_val, n_1, n_2, np.mean(before), 
                                                             np.std(before), np.mean(after), np.std(after)]
                                                             # stats.ttest_rel(before, after).pvalue, dof,
@@ -713,6 +710,8 @@ def t_test(data_all, times, param_interest):
             
     return paired_t_test
 
+
+import traceback
 
 def create_test_df(paired_t_test, parameter = 'median'):
     """
@@ -742,8 +741,11 @@ def create_test_df(paired_t_test, parameter = 'median'):
                 # val = []
                 # for _, va in value[parameter].items():
                     # val.append(va[1])
-
-                df = pd.DataFrame.from_dict(value[parameter]).T
+                try:
+                    df = pd.DataFrame.from_dict(value[parameter]).T
+                except:
+                    assert param == 'azimuth'
+                    df = pd.DataFrame.from_dict(value['mean']).T
 
 
                 df.columns = ['Z', 'p_value', 'n_1', 'n_2', 'before/GM', 'before/GM std', 'after/WM', 'after/WM std']
@@ -753,7 +755,7 @@ def create_test_df(paired_t_test, parameter = 'median'):
 
                 dfs.append(df)
     except:
-        pass
+        traceback.print_exc()
             
     df = pd.concat(dfs)
     df_grouped = df.set_index(['parameter', 'data_type', 'time']).sort_values(['parameter', 'data_type'])
