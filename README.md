@@ -40,9 +40,6 @@ You can download a copy of all the files in this repository by cloning the
 
 The first juypter notebook can be run to select automatically 25 ROIs within the white matter, and 25 ROIs for each series of measurement located in the folder `data/fixation_over_time`. CAUTION: running the notebook erase the previously generated results.
 
-## Show the distributions in the ROIs
-
-The second juypter notebook allows to plot some distributions of the polarimetric parameters within single ROIs.
 
 ## Parameter comparison
 

@@ -51,7 +51,7 @@ def parameters_histograms(MM, xs, ys, path_res):
 
     mask_MM = MM['Msk']
     
-    for idx, x in tqdm(enumerate(dummy_img), total = len(dummy_img)):
+    for idx, x in enumerate(dummy_img):
         for idy, y in enumerate(x):
             if mask_MM[idx,idy] and xs[0] < idx < xs[1] and ys[0] < idy < ys[1]:
                 for key in keys:
