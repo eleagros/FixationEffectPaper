@@ -1,7 +1,7 @@
 # Effects of formalin fixation on polarimetric properties of brain tissue: fresh or fixed?
 
 by
-Romain Gros, Omar Rodrıguez-Nunez, Leonard Felger, Stefano Moriconi, Richard McKinley, Angelo Pierangelo, Tatiana Novikova, Erik Vassella, Philippe Schucht, Ekkehard Hewer, Theoni Maragkou
+Éléa Gros, Omar Rodrıguez-Nunez, Leonard Felger, Stefano Moriconi, Richard McKinley, Angelo Pierangelo, Tatiana Novikova, Erik Vassella, Philippe Schucht, Ekkehard Hewer, Theoni Maragkou
 
 This paper has been accepted for publication in *Neurophotonics*.
 
