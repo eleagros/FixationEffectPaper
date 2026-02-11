@@ -1,3 +1,7 @@
+# Note
+# A new, updated version of this repository is available at [https://github.com/eleagros/RIAP](https://github.com/eleagros/RIAP).
+
+
 # Effects of formalin fixation on polarimetric properties of brain tissue: fresh or fixed?
 
 by
@@ -68,9 +72,6 @@ If you use this code or data, please cite the associated manuscript:
 ```
 Éléa Gros, Omar Rodríguez-Núñez, Leonard Felger, Stefano Moriconi, Richard McKinley, Angelo Pierangelo, Tatiana Novikova, Erik Vassella, Philippe Schucht, Ekkehard Hewer, Theoni Maragkou, "Effects of formalin fixation on polarimetric properties of brain tissue: fresh or fixed?," Neurophoton. 10(2) 025009 (24 May 2023)
 ```
-
-## Note
-A new, updated version of this repository is available at [https://github.com/eleagros/RIAP](https://github.com/eleagros/RIAP).
 
 ## License
 
