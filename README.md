@@ -3,7 +3,7 @@
 by
 Éléa Gros, Omar Rodrıguez-Nunez, Leonard Felger, Stefano Moriconi, Richard McKinley, Angelo Pierangelo, Tatiana Novikova, Erik Vassella, Philippe Schucht, Ekkehard Hewer, Theoni Maragkou
 
-This paper has been accepted for publication in *Neurophotonics*.
+This paper has been accepted for publication in *Neurophotonics* [https://doi.org/10.1117/1.NPh.10.2.025009](10.1117/1.NPh.10.2.025009).
 
 This study aimed to analyse the effects of formalin fixation on the polarimetric parameters of brain tissue to evaluate the probability of success of the future transfer of ML algorithms from fixed to fresh brain tissue and vice-versa.
 
@@ -63,6 +63,14 @@ Three subfolders can be found in the `data` folder:
 2. `fresh`: contains the measurements for the fresh section
 3. `fixed`: contains the measurements for the fixed section performed 24 hours after the fresh ones
 
+## Citation
+If you use this code or data, please cite the associated manuscript:
+```
+Éléa Gros, Omar Rodríguez-Núñez, Leonard Felger, Stefano Moriconi, Richard McKinley, Angelo Pierangelo, Tatiana Novikova, Erik Vassella, Philippe Schucht, Ekkehard Hewer, Theoni Maragkou, "Effects of formalin fixation on polarimetric properties of brain tissue: fresh or fixed?," Neurophoton. 10(2) 025009 (24 May 2023)
+```
+
+## Note
+A new, updated version of this repository is available at [https://github.com/eleagros/RIAP](https://github.com/eleagros/RIAP).
 
 ## License
 
