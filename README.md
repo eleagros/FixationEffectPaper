@@ -1,6 +1,6 @@
-# Note
 # A new, updated version of this repository is available at [https://github.com/eleagros/RIAP](https://github.com/eleagros/RIAP).
 
+--- 
 
 # Effects of formalin fixation on polarimetric properties of brain tissue: fresh or fixed?
 
